@@ -1,16 +1,71 @@
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
+import seaborn as sns
 import sqlite3
+import numpy as np
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import r2_score
 
 
 # ================= PAGE CONFIG =================
 
-st.set_page_config(page_title="Retail Sales Dashboard", layout="wide")
+st.set_page_config(
+    page_title="Retail Sales Intelligence Platform",
+    page_icon="📊",
+    layout="wide"
+)
 
-st.title("📊 Retail Sales Performance Analytics Dashboard")
 
-st.markdown("Interactive business intelligence dashboard built using Python + Streamlit")
+# ================= GLOBAL CSS =================
+
+st.markdown("""
+<style>
+
+html, body, [class*="css"] {
+    font-family: Inter, sans-serif;
+}
+
+.main {
+    background-color: #f5f7fb;
+}
+
+.block-container {
+    padding-top: 1rem;
+}
+
+[data-testid="metric-container"] {
+    background: white;
+    border-radius: 16px;
+    padding: 18px;
+    box-shadow: 0px 8px 24px rgba(0,0,0,0.06);
+}
+
+h1 {
+    font-weight: 800;
+}
+
+h2 {
+    font-weight: 700;
+}
+
+h3 {
+    font-weight: 600;
+}
+
+</style>
+""", unsafe_allow_html=True)
+
+
+# ================= HEADER =================
+
+st.title("📊 Business Intelligence Analytics Platform")
+
+st.caption(
+    "Executive-level analytics dashboard powered by Python, SQL, and Machine Learning"
+)
+
+st.divider()
 
 
 # ================= LOAD DATA =================
@@ -23,89 +78,137 @@ df['Month-Year'] = df['Order Date'].dt.to_period('M').astype(str)
 
 df['Year'] = df['Order Date'].dt.year
 
+df["Profit"] = df["Sales"] * 0.18
+
+
+# ================= SIDEBAR =================
+
+st.sidebar.title("⚙ Dashboard Controls")
+
+st.sidebar.markdown("Filter analytics dynamically")
+
+region = st.sidebar.multiselect(
+    "Region",
+    df['Region'].unique(),
+    default=df['Region'].unique()
+)
+
+category = st.sidebar.multiselect(
+    "Category",
+    df['Category'].unique(),
+    default=df['Category'].unique()
+)
+
+date_range = st.sidebar.date_input(
+    "Date Range",
+    [df['Order Date'].min(), df['Order Date'].max()]
+)
+
+
+df = df[
+    (df['Region'].isin(region)) &
+    (df['Category'].isin(category)) &
+    (df['Order Date'] >= pd.to_datetime(date_range[0])) &
+    (df['Order Date'] <= pd.to_datetime(date_range[1]))
+]
+
 
 # ================= KPI SECTION =================
 
-st.subheader("📈 Key Business Metrics")
+st.subheader("📈 Performance Overview")
 
-col1, col2, col3, col4 = st.columns(4)
+k1, k2, k3, k4, k5 = st.columns(5)
 
-col1.metric("Total Sales", f"${round(df['Sales'].sum(),2)}")
-
-col2.metric("Total Orders", df['Order ID'].nunique())
-
-col3.metric("Total Customers", df['Customer ID'].nunique())
-
-col4.metric("Avg Order Value", f"${round(df['Sales'].mean(),2)}")
-
-st.markdown("---")
+k1.metric("Revenue", f"${round(df['Sales'].sum(),2):,}")
+k2.metric("Profit", f"${round(df['Profit'].sum(),2):,}")
+k3.metric("Orders", df['Order ID'].nunique())
+k4.metric("Customers", df['Customer ID'].nunique())
+k5.metric("Avg Order", f"${round(df['Sales'].mean(),2)}")
 
 
-# ================= FILTER SECTION =================
-
-st.subheader("🔍 Filter Data")
-
-region_filter = st.selectbox(
-    "Select Region",
-    ["All"] + list(df['Region'].unique())
-)
-
-category_filter = st.selectbox(
-    "Select Category",
-    ["All"] + list(df['Category'].unique())
-)
-
-if region_filter != "All":
-    df = df[df['Region'] == region_filter]
-
-if category_filter != "All":
-    df = df[df['Category'] == category_filter]
-
-st.markdown("---")
+st.divider()
 
 
-# ================= MONTHLY SALES TREND =================
+# ================= TREND SECTION =================
 
-st.subheader("📅 Monthly Sales Trend")
+c1, c2 = st.columns(2)
 
-monthly_sales = df.groupby('Month-Year')['Sales'].sum()
+with c1:
 
-st.line_chart(monthly_sales)
+    st.subheader("📅 Monthly Revenue Trend")
 
+    monthly_sales = df.groupby("Month-Year")["Sales"].sum()
 
-# ================= YEARLY SALES TREND =================
-
-st.subheader("📊 Yearly Sales Trend")
-
-yearly_sales = df.groupby('Year')['Sales'].sum()
-
-st.line_chart(yearly_sales)
+    st.line_chart(monthly_sales)
 
 
-# ================= CATEGORY DISTRIBUTION =================
+with c2:
 
-st.subheader("📦 Category Contribution")
+    st.subheader("📊 Yearly Revenue Trend")
 
-category_sales = df.groupby('Category')['Sales'].sum()
+    yearly_sales = df.groupby("Year")["Sales"].sum()
 
-fig, ax = plt.subplots()
-
-ax.pie(
-    category_sales,
-    labels=category_sales.index,
-    autopct="%1.1f%%"
-)
-
-st.pyplot(fig)
+    st.line_chart(yearly_sales)
 
 
-# ================= REGION PERFORMANCE =================
+st.divider()
 
-st.subheader("🌍 Region-wise Performance")
 
-region_sales = df.groupby("Region")["Sales"].sum()
+# ================= CATEGORY + REGION =================
 
-st.bar_chart(region_sales)
+c1, c2 = st.columns(2)
+
+with c1:
+
+    st.subheader("📦 Category Contribution")
+
+    category_sales = df.groupby("Category")["Sales"].sum()
+
+    fig, ax = plt.subplots()
+
+    ax.pie(
+        category_sales,
+        labels=category_sales.index,
+        autopct="%1.1f%%"
+    )
+
+    st.pyplot(fig)
+
+
+with c2:
+
+    st.subheader("🌍 Region Performance")
+
+    region_sales = df.groupby("Region")["Sales"].sum()
+
+    st.bar_chart(region_sales)
+
+
+st.divider()
+
+
+# ================= SEGMENT ANALYSIS =================
+
+st.subheader("👥 Customer Segmentation")
+
+segment_sales = df.groupby("Segment")["Sales"].sum()
+
+st.bar_chart(segment_sales)
+
+
+st.divider()
+
+
+# ================= PROFIT DISTRIBUTION =================
+
+st.subheader("💰 Profit by Region")
+
+profit_region = df.groupby("Region")["Profit"].sum()
+
+st.bar_chart(profit_region)
+
+
+st.divider()
 
 
 # ================= TOP PRODUCTS =================
@@ -119,26 +222,37 @@ top_products = (
     .head(10)
 )
 
-st.dataframe(top_products)
+st.bar_chart(top_products)
 
 
-# ================= TOP CITIES =================
-
-st.subheader("🏙 Top Performing Cities")
-
-top_cities = (
-    df.groupby("City")["Sales"]
-    .sum()
-    .sort_values(ascending=False)
-    .head(10)
-)
-
-st.bar_chart(top_cities)
+st.divider()
 
 
-# ================= SQL ANALYTICS SECTION =================
+# ================= CORRELATION =================
 
-st.subheader("🗄 SQL Query Analytics")
+st.subheader("🔥 Feature Correlation Matrix")
+
+numeric_df = df.select_dtypes(include=np.number).dropna(axis=1, how="all")
+
+if len(numeric_df.columns) > 1:
+
+    fig, ax = plt.subplots(figsize=(6,4))
+
+    sns.heatmap(
+        numeric_df.corr(),
+        annot=True,
+        cmap="coolwarm"
+    )
+
+    st.pyplot(fig)
+
+
+st.divider()
+
+
+# ================= SQL ANALYTICS =================
+
+st.subheader("🗄 SQL Analytics Snapshot")
 
 conn = sqlite3.connect("sales.db")
 
@@ -156,31 +270,84 @@ st.dataframe(sql_result)
 conn.close()
 
 
-# ================= DOWNLOAD REPORT =================
-
-st.subheader("⬇ Download Analytics Report")
-
-with open("sales_report.xlsx", "rb") as file:
-    st.download_button(
-        label="Download Excel Report",
-        data=file,
-        file_name="sales_report.xlsx"
-    )
+st.divider()
 
 
-# ================= BUSINESS INSIGHTS =================
+# ================= FORECAST SECTION =================
 
-st.subheader("💡 Key Business Insights")
+st.subheader("🤖 Sales Forecast Engine")
 
-st.success("West region generates highest overall revenue")
+forecast_df = df.groupby("Year")["Sales"].sum().reset_index()
 
-st.info("Technology category contributes the largest share of total sales")
+X = forecast_df["Year"].values.reshape(-1,1)
 
-st.warning("Top 5 cities contribute disproportionately high revenue concentration")
+y = forecast_df["Sales"].values
+
+model = LinearRegression()
+
+model.fit(X,y)
+
+future_year = np.array([[forecast_df["Year"].max()+1]])
+
+prediction = model.predict(future_year)
+
+st.success(
+    f"Projected revenue for {future_year[0][0]} ≈ ${round(prediction[0],2):,}"
+)
 
 
-# ================= RAW DATA VIEW =================
+prediction_existing = model.predict(X)
 
-st.subheader("📄 Dataset Preview")
+score = r2_score(y, prediction_existing)
 
-st.dataframe(df)
+st.metric("Forecast Confidence (R²)", round(score,3))
+
+
+growth = st.slider("Scenario Simulation (%)", 0, 50, 10)
+
+future_sales = prediction[0] * (1 + growth/100)
+
+st.info(
+    f"Simulated future revenue after {growth}% growth ≈ ${round(future_sales,2):,}"
+)
+
+
+st.divider()
+
+
+# ================= EXECUTIVE INSIGHTS =================
+
+st.subheader("📌 Executive Insights")
+
+top_region = df.groupby("Region")["Sales"].sum().idxmax()
+
+top_category = df.groupby("Category")["Sales"].sum().idxmax()
+
+st.success(f"{top_region} region leads revenue generation")
+
+st.info(f"{top_category} category dominates overall performance")
+
+st.warning("Revenue concentration is heavily dependent on top cities")
+
+
+st.divider()
+
+
+# ================= DOWNLOAD SECTION =================
+
+st.subheader("⬇ Export Filtered Dataset")
+
+csv = df.to_csv(index=False).encode()
+
+st.download_button(
+    "Download CSV",
+    csv,
+    "filtered_sales.csv"
+)
+
+
+# ================= FOOTER =================
+
+st.caption(
+    "Built by Apoorv Pachori • Retail Sales Intelligence Platform • 2026"
+)
